@@ -6,16 +6,18 @@ This project is designed to monitor and visualize the power consumption, voltage
 ## Features
 
 - **Real-Time Monitoring**: Continuously monitors and displays power, voltage, and current consumption of the MATLAB process.
-- **Configurable Settings**: The script is configurable, allowing for adjustments to the COM port, baud rate, and other parameters.
+- **Cross-Platform Support**: Separate scripts are provided for Windows and Linux environments.
+- **Configurable Settings**: The scripts are configurable, allowing for adjustments to the COM port, baud rate, and other parameters.
 - **Data Logging**: Automatically logs power consumption data to CSV files for later analysis.
 - **Modular Codebase**: Clean and maintainable code structure with utility functions separated into modules.
 
 ## Project Structure
 
-```
+```plaintext
 your_project/
 │
-├── main.py                 # Main script for running the application
+├── main_windows.py         # Main script for running the application on Windows
+├── main_linux.py           # Main script for running the application on Linux
 ├── README.md               # Project documentation
 ├── requirements.txt        # Python dependencies
 └── data/                   # Directory where CSV files are saved
@@ -51,11 +53,11 @@ pip install -r requirements.txt
 
 ### 4. Configure the Script
 
-Open the `main.py` file and adjust the settings at the top of the script to match your environment:
+Depending on your operating system, open the appropriate script (`main_windows.py` for Windows or `main_linux.py` for Linux) and adjust the settings at the top of the script to match your environment:
 
 ```python
 PMD_SETTINGS = {
-    'port': 'COM3',  # Replace with your sensor's COM port
+    'port': '/dev/ttyUSB0',  # Replace with your sensor's COM port (e.g., 'COM3' for Windows, '/dev/ttyUSB0' for Linux)
     'baudrate': 115200,
     'bytesize': 8,
     'stopbits': 1,
@@ -64,15 +66,21 @@ PMD_SETTINGS = {
 ```
 
 - **port**: Adjust to the correct COM port for your setup.
-- **process_name**: Specify the name of the process you want to monitor (e.g., `MATLAB.exe`).
+- **process_name**: Specify the name of the process you want to monitor (e.g., `MATLAB.exe` for Windows, `firefox` for Linux).
 - **save_to_csv**: Enable or disable saving the power data to a CSV file.
 
 ### 5. Run the Application
 
 Once everything is set up, you can run the application using:
 
+For Windows:
 ```bash
-python main.py
+python main_windows.py
+```
+
+For Linux:
+```bash
+python main_linux.py
 ```
 
 ### 6. View and Save Data
@@ -91,8 +99,8 @@ mkdir data
 
 ### Common Issues
 
-- **Sensor Connection Failed**: Ensure the PMD sensor is correctly connected to the specified COM port and the settings in `main.py` match the sensor’s configuration.
-- **Process Not Found**: Verify that the process name specified in `main.py` matches the actual name of the process as it appears in your system’s task manager.
+- **Sensor Connection Failed**: Ensure the PMD sensor is correctly connected to the specified COM port and the settings in the script match the sensor’s configuration.
+- **Process Not Found**: Verify that the process name specified in the script matches the actual name of the process as it appears in your system’s task manager.
 - **Permission Errors**: Ensure that the script has permission to save files to the specified directory.
 
 ## License
@@ -103,7 +111,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 The original code is licensed under the MIT License:
 
-```
+```plaintext
 MIT License
 
 Copyright (c) 2022 bjorntas
@@ -127,7 +135,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Main Contributions
+### Main Contributions
+
 The main contributions to the creation of this code were made by [Celestino Simon](https://github.com/CSimon369).
 
 ## Inspiration
