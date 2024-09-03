@@ -178,7 +178,7 @@ def save_data_to_csv(df: pd.DataFrame) -> None:
     """Saves the power data to a CSV file."""
     try:
         df_power = df[['timestamp', 'id', 'unit', 'Power']].dropna(subset=['Power'])
-        date_name = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        date_name = datetime.now().strftime('%Y-%m-%d-%H-%M')
         file_path = f'./data/{date_name}_power_measurements.csv'  # Use a generic path
         df_power.to_csv(file_path, mode='w', header=True, index=False)
         print(f"Power data saved to {file_path}")
