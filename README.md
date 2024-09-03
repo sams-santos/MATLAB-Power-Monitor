@@ -127,9 +127,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## Acknowledgments
-
-Special thanks to the developers of the open-source libraries that made this project possible.
+## Main Contributions
+The main contributions to the creation of this code were made by [Celestino Simon](https://github.com/CSimon369).
 
 ## Inspiration
 
