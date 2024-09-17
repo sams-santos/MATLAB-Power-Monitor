@@ -11,7 +11,7 @@ import matplotlib.gridspec as gridspec
 
 # Settings for the Elmor Labs PMD sensor connection
 PMD_SETTINGS = {
-    'port': 'COM3',  # Replace 'COM3' with the correct port for your setup
+    'port': 'COM4',  # Replace 'COM3' with the correct port for your setup
     'baudrate': 115200,
     'bytesize': 8,
     'stopbits': 1,
