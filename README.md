@@ -1,5 +1,5 @@
 
-# MATLAB Power Consumption Monitor
+# PowerTrack: Real-Time Process Energy Analysis
 
 This project monitors and visualizes the power consumption, voltage, and current of a specified process (e.g., MATLAB) using data from the Elmor Labs PMD sensor. It provides real-time data plotting and logging, useful for performance analysis and optimization. The code works on both Windows and Linux environments.
 
