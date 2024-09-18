@@ -47,11 +47,11 @@ def detect_serial_port():
 
 
 def list_ports():
-    """Lists all available COM ports."""
+    """Lists all available COM or ttyUSB ports."""
     ports = list(serial.tools.list_ports.comports())
     print('Available ports:')
     for p in ports:
-        print(p)
+        print(f'{p.device} - {p.description}')
     print()
 
 

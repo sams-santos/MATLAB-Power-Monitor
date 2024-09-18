@@ -1,26 +1,25 @@
 
 # MATLAB Power Consumption Monitor
 
-This project is designed to monitor and visualize the power consumption, voltage, and current of MATLAB processes using data from the Elmor Labs PMD sensor. It provides real-time data plotting and logging, which can be useful for performance analysis and optimization.
+This project monitors and visualizes the power consumption, voltage, and current of a specified process (e.g., MATLAB) using data from the Elmor Labs PMD sensor. It provides real-time data plotting and logging, useful for performance analysis and optimization. The code works on both Windows and Linux environments.
 
 ## Features
 
-- **Real-Time Monitoring**: Continuously monitors and displays power, voltage, and current consumption of the MATLAB process.
-- **Cross-Platform Support**: Separate scripts are provided for Windows and Linux environments.
-- **Configurable Settings**: The scripts are configurable, allowing for adjustments to the COM port, baud rate, and other parameters.
+- **Real-Time Monitoring**: Continuously monitors and displays power, voltage, and current consumption of a specified process.
+- **Cross-Platform Support**: Automatically detects the operating system (Windows or Linux) and adjusts the COM port settings accordingly.
+- **Configurable Settings**: Easily configurable settings for sensor connection, process name, and other parameters.
 - **Data Logging**: Automatically logs power consumption data to CSV files for later analysis.
-- **Modular Codebase**: Clean and maintainable code structure with utility functions separated into modules.
-
+- **Integrated Plotting**: Real-time plotting of power, voltage, and current measurements.
+  
 ## Project Structure
 
 ```plaintext
 your_project/
 │
-├── main_windows.py         # Main script for running the application on Windows
-├── main_linux.py           # Main script for running the application on Linux
-├── README.md               # Project documentation
-├── requirements.txt        # Python dependencies
-└── data/                   # Directory where CSV files are saved
+├── main.py                # Unified script for both Windows and Linux
+├── README.md              # Project documentation
+├── requirements.txt       # Python dependencies
+└── data/                  # Directory where CSV files are saved
 ```
 
 ## Setup Instructions
@@ -40,7 +39,7 @@ It’s recommended to use a virtual environment to manage dependencies. You can 
 
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows use: venv\Scriptsctivate
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
 ```
 
 ### 3. Install Dependencies
@@ -53,11 +52,11 @@ pip install -r requirements.txt
 
 ### 4. Configure the Script
 
-Depending on your operating system, open the appropriate script (`main_windows.py` for Windows or `main_linux.py` for Linux) and adjust the settings at the top of the script to match your environment:
+Open the `main.py` script and adjust the settings at the top to match your environment:
 
 ```python
 PMD_SETTINGS = {
-    'port': '/dev/ttyUSB0',  # Replace with your sensor's COM port (e.g., 'COM3' for Windows, '/dev/ttyUSB0' for Linux)
+    'port': None,  # The script will automatically detect the correct COM port for Windows or Linux
     'baudrate': 115200,
     'bytesize': 8,
     'stopbits': 1,
@@ -65,7 +64,7 @@ PMD_SETTINGS = {
 }
 ```
 
-- **port**: Adjust to the correct COM port for your setup.
+- **port**: Leave as `None` as the script will detect the correct port automatically.
 - **process_name**: Specify the name of the process you want to monitor (e.g., `MATLAB.exe` for Windows, `firefox` for Linux).
 - **save_to_csv**: Enable or disable saving the power data to a CSV file.
 
@@ -73,15 +72,11 @@ PMD_SETTINGS = {
 
 Once everything is set up, you can run the application using:
 
-For Windows:
 ```bash
-python main_windows.py
+python main.py
 ```
 
-For Linux:
-```bash
-python main_linux.py
-```
+The script will automatically detect the operating system and configure itself accordingly.
 
 ### 6. View and Save Data
 
@@ -99,7 +94,7 @@ mkdir data
 
 ### Common Issues
 
-- **Sensor Connection Failed**: Ensure the PMD sensor is correctly connected to the specified COM port and the settings in the script match the sensor’s configuration.
+- **Sensor Connection Failed**: Ensure the PMD sensor is correctly connected to the specified COM port and that the settings in the script match the sensor’s configuration.
 - **Process Not Found**: Verify that the process name specified in the script matches the actual name of the process as it appears in your system’s task manager.
 - **Permission Errors**: Ensure that the script has permission to save files to the specified directory.
 
