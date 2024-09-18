@@ -32,7 +32,7 @@ PMD_SETTINGS = {
 LIST_ALL_WINDOWS_PORTS = True  # Set to True to list all available COM ports
 SAVE_TO_CSV = True  # Set to True to save the power data to a CSV file
 MAX_LENGTH = 1000  # Maximum number of data points to retain in memory
-PROCESS_NAME = 'rsession-utf8.exe'  # Name of the process to monitor
+PROCESS_NAME = 'firefox'  # Name of the process to monitor
 NUM_CORES = psutil.cpu_count()  # Get the number of CPU cores
 
 # Initialize a global DataFrame for storing sensor data
@@ -59,19 +59,19 @@ def detect_serial_port():
     ports = list(serial.tools.list_ports.comports())
 
     # Define the target device description (e.g., USB-SERIAL CH340)
-    target_device_description = 'USB-SERIAL CH340'
+    target_device_description = ['USB-SERIAL', 'USB Serial']
 
     if IS_WINDOWS:
-        # For Windows, look for a device matching the target description
+        # For Windows, look for a device matching the target descriptions
         for port in ports:
-            if target_device_description in port.description:
+            if any(desc in port.description for desc in target_device_description):
                 return port.device  # Return COMx port for Windows
 
     elif IS_LINUX:
         # For Linux, look for devices like /dev/ttyUSBx or /dev/ttySx
         for port in ports:
             # Check description and device name (typically /dev/ttyUSBx or /dev/ttySx)
-            if target_device_description in port.description:
+            if any(desc in port.description for desc in target_device_description):
                 return port.device  # Return /dev/ttyUSBx or /dev/ttySx for Linux
 
     print("No appropriate port found. Listing available ports:")
