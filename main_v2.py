@@ -11,6 +11,7 @@ import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import logging
 import os
+from collections import deque
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,6 +45,9 @@ voltage_ax = None
 current_ax = None
 power_ax = None
 
+# Deque to store energy values for rolling average
+energy_values = deque()
+
 
 def list_ports():
     """Lists all available COM or ttyUSB ports."""
@@ -70,7 +74,6 @@ def detect_serial_port():
     elif IS_LINUX:
         # For Linux, look for devices like /dev/ttyUSBx or /dev/ttySx
         for port in ports:
-            # Check description and device name (typically /dev/ttyUSBx or /dev/ttySx)
             if any(desc in port.description for desc in target_device_description):
                 return port.device  # Return /dev/ttyUSBx or /dev/ttySx for Linux
 
@@ -79,22 +82,27 @@ def detect_serial_port():
     return None  # If no suitable port is found
 
 
-def get_cpu_usage(process_names: list) -> float:
-    """Gets the combined CPU usage of a list of processes."""
-    total_cpu_usage = 0.0
+def get_cpu_usage(process_names: list) -> dict:
+    """Gets the combined CPU, memory, and temperature usage of a list of processes."""
+    metrics = {
+        'cpu_usage': 0.0,
+        'memory_usage': 0.0,
+        'temperature': 0.0  # This will require external functions like 'psutil.sensors_temperatures()'
+    }
 
     for process_name in process_names:
         for process in psutil.process_iter(['pid', 'name']):
             if process.info['name'] == process_name:
                 try:
-                    cpu_usage = psutil.Process(process.info['pid']).cpu_percent(interval=1)
-                    total_cpu_usage += cpu_usage
-                    logging.debug(f'CPU usage for {process_name}: {cpu_usage}%')
+                    proc = psutil.Process(process.info['pid'])
+                    metrics['cpu_usage'] += proc.cpu_percent(interval=0.1)
+                    metrics['memory_usage'] += proc.memory_percent()
+                    # Optionally: Add temperature if available
+                    logging.debug(f'CPU usage for {process_name}: {metrics["cpu_usage"]}%')
                 except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
                     logging.error(f'Error accessing process {process_name}: {e}')
-    
-    return total_cpu_usage
 
+    return metrics
 
 
 def normalize_cpu_usage(cpu_usage: float, num_cores: int) -> float:
@@ -102,6 +110,13 @@ def normalize_cpu_usage(cpu_usage: float, num_cores: int) -> float:
     normalized = min(max(cpu_usage / num_cores, 0.0), 100.0)
     logging.debug(f'Normalized CPU usage: {normalized}%')
     return normalized
+
+
+def rolling_average(data, window_size):
+    """Calculates a rolling average to smooth the energy values."""
+    if len(data) > window_size:
+        data.popleft()  # Remove the oldest value
+    return sum(data) / len(data)
 
 
 def check_connection() -> None:
@@ -127,6 +142,11 @@ def check_connection() -> None:
         logging.error(f"Failed to establish connection with PMD sensor: {e}")
 
 
+def calculate_energy(voltage_value, current_value, cpu_usage, memory_usage, temperature):
+    """Calculates energy consumption based on multiple system metrics."""
+    return (voltage_value * current_value * cpu_usage / 100) * (1 + memory_usage / 100) * (1 + temperature / 100)
+
+
 def get_new_sensor_values() -> pd.DataFrame:
     """Gets new sensor values from the Elmor Labs PMD and stores them in a DataFrame."""
     if PMD_SETTINGS['port'] is None:
@@ -150,19 +170,22 @@ def get_new_sensor_values() -> pd.DataFrame:
         current_value = int.from_bytes(read_bytes[i * 4 + 2:i * 4 + 4], byteorder='little') * 0.1
 
         # Get CPU usage for the list of processes
-        cpu_usage = get_cpu_usage(PROCESS_NAMES)
-        cpu_usage_normalized = normalize_cpu_usage(cpu_usage, NUM_CORES)
-        power_value = max((voltage_value * current_value * cpu_usage_normalized) / 100, 0.0)
-        power_value = round(power_value, 4)
+        metrics = get_cpu_usage(PROCESS_NAMES)
+        cpu_usage_normalized = normalize_cpu_usage(metrics['cpu_usage'], NUM_CORES)
+        energy_value = calculate_energy(voltage_value, current_value, cpu_usage_normalized, metrics['memory_usage'], metrics['temperature'])
 
-        logging.debug(f"Collected data - Power: {power_value} W, Voltage: {voltage_value} V, Current: {current_value} A")
+        # Add the energy value to the rolling average deque
+        energy_values.append(energy_value)
+        rolling_avg_energy = rolling_average(energy_values, window_size=10)
+
+        logging.debug(f"Collected data - Power: {rolling_avg_energy} W, Voltage: {voltage_value} V, Current: {current_value} A")
 
         # Create DataFrame with new sensor data
         data = {
             'timestamp': [timestamp, timestamp, timestamp],
             'id': [name, name, name],
             'unit': ['P', 'U', 'I'],
-            'Power': [power_value, None, None],
+            'Power': [rolling_avg_energy, None, None],
             'Voltage': [None, voltage_value, None],
             'Current': [None, None, current_value],
         }
@@ -173,6 +196,7 @@ def get_new_sensor_values() -> pd.DataFrame:
     except serial.SerialException as e:
         logging.error(f"Serial communication error: {e}")
         return pd.DataFrame()
+
 
 def animation_update(frame):
     """Updates the plot with new sensor data."""
@@ -212,14 +236,14 @@ def animation_update(frame):
     df_current_plot.plot(ax=current_ax, legend=False, color='green', linewidth=2)
 
     # Set axis labels and titles
-    power_ax.set_ylabel('Power Consumption [W]', fontsize=12, color='red')
-    voltage_ax.set_ylabel('Voltage [V]', fontsize=12, color='blue')
-    current_ax.set_ylabel('Current [A]', fontsize=12, color='green')
+    power_ax.set_ylabel('Power [W]', fontsize=10, color='#FF6F61')
+    voltage_ax.set_ylabel('Voltage [V]', fontsize=10, color='#6FA9E6')
+    current_ax.set_ylabel('Current [A]', fontsize=10, color='#85C085')
 
     # Set titles for each plot
-    power_ax.set_title('Real-Time MATLAB Power Consumption', fontsize=14, color='red')
-    voltage_ax.set_title('Real-Time CPU Voltage Consumption', fontsize=14, color='blue')
-    current_ax.set_title('Real-Time CPU Current Consumption', fontsize=14, color='green')
+    power_ax.set_title('Power Consumption', fontsize=12, color='#FF6F61')
+    voltage_ax.set_title('CPU Voltage Consumption', fontsize=12, color='#6FA9E6')
+    current_ax.set_title('CPU Current Consumption', fontsize=12, color='#85C085')
 
     # Display gridlines
     power_ax.grid(True, which='both', linestyle='--', linewidth=0.5)
@@ -266,21 +290,22 @@ def animation_update(frame):
 
 
 def save_data_to_csv(df: pd.DataFrame) -> None:
-    """Saves the power data to a CSV file."""
+    """Saves the power data to a CSV file with Power, Voltage, and Current values on the same row for each timestamp."""
     global date_name
     try:
         # Ensure the 'data' directory exists
         os.makedirs('./data', exist_ok=True)
 
-        # Filter only for valid Power entries
-        df_power = df[['timestamp', 'id', 'unit', 'Power']].dropna(subset=['Power'])
+        # Group by 'timestamp' and consolidate 'Power', 'Voltage', 'Current' into a single row for each timestamp
+        df_pivot = df.pivot_table(index='timestamp', 
+                                  values=['Power', 'Voltage', 'Current'], 
+                                  aggfunc='first').reset_index()
 
         # Save to CSV
-        file_path = f'./data/{date_name}_measurements.csv'  # Use a generic path
-        df_power.to_csv(file_path, mode='w', header=True, index=False)
-        logging.info(f"Data saved to {file_path}")
+        file_path = f'./data/{date_name}_measurements.csv'
+        df_pivot.to_csv(file_path, mode='w', header=True, index=False)
     except Exception as e:
-        logging.error(f"Error saving power data to CSV: {e}")
+        logging.error(f"Error saving data to CSV: {e}")
 
 
 if __name__ == "__main__":
@@ -298,8 +323,9 @@ if __name__ == "__main__":
     current_ax = plt.subplot(gs[1])
     power_ax = plt.subplot(gs[2])
 
-    fig.suptitle('Measurement CPU and MATLAB', fontsize=14)
-    anim = FuncAnimation(fig, animation_update, interval=1000, cache_frame_data=False)
+    fig.suptitle('Measurement CPU', fontsize=14)
+    anim = FuncAnimation(fig, animation_update, interval=2000, cache_frame_data=False)
     fig.tight_layout()
     fig.subplots_adjust(left=0.09)
     plt.show()
+
