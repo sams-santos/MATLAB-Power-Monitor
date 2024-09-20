@@ -290,20 +290,21 @@ def animation_update(frame):
 
 
 def save_data_to_csv(df: pd.DataFrame) -> None:
-    """Saves the power data to a CSV file with Power, Voltage, and Current values on the same row for each timestamp."""
+    """Saves the power data to a CSV file with aggregated measurements per timestamp."""
     global date_name
     try:
         # Ensure the 'data' directory exists
         os.makedirs('./data', exist_ok=True)
 
-        # Group by 'timestamp' and consolidate 'Power', 'Voltage', 'Current' into a single row for each timestamp
+        # Pivot table to aggregate Power, Voltage, and Current for each timestamp
         df_pivot = df.pivot_table(index='timestamp', 
                                   values=['Power', 'Voltage', 'Current'], 
-                                  aggfunc='first').reset_index()
+                                  aggfunc='mean').reset_index()
 
-        # Save to CSV
+        # Save the aggregated data to CSV
         file_path = f'./data/{date_name}_measurements.csv'
         df_pivot.to_csv(file_path, mode='w', header=True, index=False)
+        
     except Exception as e:
         logging.error(f"Error saving data to CSV: {e}")
 
