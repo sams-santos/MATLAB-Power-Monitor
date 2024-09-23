@@ -15,6 +15,7 @@ from collections import deque
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+start_time = time.time()  # Store the starting time of the script
 
 # Detect operating system
 IS_WINDOWS = platform.system() == 'Windows'
@@ -32,22 +33,17 @@ PMD_SETTINGS = {
 # Configuration flags
 LIST_ALL_WINDOWS_PORTS = True  # Set to True to list all available COM ports
 SAVE_TO_CSV = True  # Set to True to save the power data to a CSV file
-MAX_LENGTH = 1000  # Maximum number of data points to retain in memory
 PROCESS_NAMES = ['rstudio.exe', 'rsession-utf8.exe']
 NUM_CORES = psutil.cpu_count()  # Get the number of CPU cores
 
 # Initialize a global DataFrame for storing sensor data
-df = pd.DataFrame(columns=['timestamp', 'id', 'unit', 'Power', 'Voltage', 'Current'])
+df = pd.DataFrame(columns=['timestamp', 'Power', 'Voltage', 'Current'])
 date_name = datetime.now().strftime('%y%m%d-%H%M')
 
 # Define global variables for plot axes
 voltage_ax = None
 current_ax = None
 power_ax = None
-
-# Deque to store energy values for rolling average
-energy_values = deque()
-
 
 def list_ports():
     """Lists all available COM or ttyUSB ports."""
@@ -56,7 +52,6 @@ def list_ports():
     for p in ports:
         print(f'{p.device} - {p.description}')
     print()
-
 
 def detect_serial_port():
     """Detects the serial port based on the operating system and device description."""
@@ -81,7 +76,6 @@ def detect_serial_port():
     list_ports()  # List all ports for debugging
     return None  # If no suitable port is found
 
-
 def get_cpu_usage(process_names: list) -> dict:
     """Gets the combined CPU, memory, and temperature usage of a list of processes."""
     metrics = {
@@ -104,20 +98,11 @@ def get_cpu_usage(process_names: list) -> dict:
 
     return metrics
 
-
 def normalize_cpu_usage(cpu_usage: float, num_cores: int) -> float:
     """Normalizes CPU usage to a range of 0-100% considering the number of cores."""
     normalized = min(max(cpu_usage / num_cores, 0.0), 100.0)
     logging.debug(f'Normalized CPU usage: {normalized}%')
     return normalized
-
-
-def rolling_average(data, window_size):
-    """Calculates a rolling average to smooth the energy values."""
-    if len(data) > window_size:
-        data.popleft()  # Remove the oldest value
-    return sum(data) / len(data)
-
 
 def check_connection() -> None:
     """Checks the connection with the Elmor Labs PMD sensor."""
@@ -141,11 +126,9 @@ def check_connection() -> None:
     except (serial.SerialException, AssertionError) as e:
         logging.error(f"Failed to establish connection with PMD sensor: {e}")
 
-
 def calculate_energy(voltage_value, current_value, cpu_usage, memory_usage, temperature):
     """Calculates energy consumption based on multiple system metrics."""
     return (voltage_value * current_value * cpu_usage / 100) * (1 + memory_usage / 100) * (1 + temperature / 100)
-
 
 def get_new_sensor_values() -> pd.DataFrame:
     """Gets new sensor values from the Elmor Labs PMD and stores them in a DataFrame."""
@@ -161,7 +144,7 @@ def get_new_sensor_values() -> pd.DataFrame:
             read_bytes = ser.read(16)  # Read sensor data
 
         # Capture the current timestamp
-        timestamp = pd.Timestamp(datetime.now())
+        elapsed_time = time.time() - start_time  # Calculate the time elapsed since the start
 
         # Process the received sensor data
         i = 2  # Index for reading values
@@ -174,20 +157,14 @@ def get_new_sensor_values() -> pd.DataFrame:
         cpu_usage_normalized = normalize_cpu_usage(metrics['cpu_usage'], NUM_CORES)
         energy_value = calculate_energy(voltage_value, current_value, cpu_usage_normalized, metrics['memory_usage'], metrics['temperature'])
 
-        # Add the energy value to the rolling average deque
-        energy_values.append(energy_value)
-        rolling_avg_energy = rolling_average(energy_values, window_size=10)
-
-        logging.debug(f"Collected data - Power: {rolling_avg_energy} W, Voltage: {voltage_value} V, Current: {current_value} A")
+        logging.debug(f"Collected data - Power: {energy_value} W, Voltage: {voltage_value} V, Current: {current_value} A")
 
         # Create DataFrame with new sensor data
         data = {
-            'timestamp': [timestamp, timestamp, timestamp],
-            'id': [name, name, name],
-            'unit': ['P', 'U', 'I'],
-            'Power': [rolling_avg_energy, None, None],
-            'Voltage': [None, voltage_value, None],
-            'Current': [None, None, current_value],
+            'elapsed_time': [elapsed_time],  # Store elapsed time instead of timestamp
+            'Power': [energy_value],
+            'Voltage': [voltage_value],
+            'Current': [current_value],
         }
 
         df_new = pd.DataFrame(data)
@@ -196,7 +173,6 @@ def get_new_sensor_values() -> pd.DataFrame:
     except serial.SerialException as e:
         logging.error(f"Serial communication error: {e}")
         return pd.DataFrame()
-
 
 def animation_update(frame):
     """Updates the plot with new sensor data."""
@@ -211,19 +187,11 @@ def animation_update(frame):
     if not df_new_data_clean.empty and df_new_data_clean.shape[1] > 0:
         # Concatenate only if the DataFrame is not empty after cleaning
         df = pd.concat([df, df_new_data_clean], ignore_index=True)
-        logging.debug("New valid data appended to DataFrame.")
-    else:
-        logging.debug("No valid new data to append.")
 
-    # Trim DataFrame to the last MAX_LENGTH rows if necessary
-    if df.shape[0] > MAX_LENGTH:
-        df = df.iloc[-MAX_LENGTH:]
-        logging.debug("DataFrame trimmed to maintain maximum length.")
-
-    # Prepare data for plotting
-    df_power_plot = df[df.unit == 'P'].pivot(columns=['id'], index='timestamp', values='Power')
-    df_voltage_plot = df[df.unit == 'U'].pivot(columns=['id'], index='timestamp', values='Voltage')
-    df_current_plot = df[df.unit == 'I'].pivot(columns=['id'], index='timestamp', values='Current')
+    # Use groupby to organize data by elapsed_time for plotting
+    df_power_plot = df.groupby('elapsed_time')['Power'].mean()
+    df_voltage_plot = df.groupby('elapsed_time')['Voltage'].mean()
+    df_current_plot = df.groupby('elapsed_time')['Current'].mean()
 
     # Clear the axes for redrawing
     power_ax.cla()
@@ -250,10 +218,10 @@ def animation_update(frame):
     voltage_ax.grid(True, which='both', linestyle='--', linewidth=0.5)
     current_ax.grid(True, which='both', linestyle='--', linewidth=0.5)
 
-    # Format x-axis to display time correctly
-    power_ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-    voltage_ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-    current_ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    # Format x-axis to display time as elapsed time
+    power_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{int(x // 60)}m {int(x % 60)}s'))
+    voltage_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{int(x // 60)}m {int(x % 60)}s'))
+    current_ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{int(x // 60)}m {int(x % 60)}s'))
 
     # Rotate date labels for better readability
     plt.setp(power_ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
@@ -265,20 +233,20 @@ def animation_update(frame):
 
     # For power axis
     if not df_power_plot.empty:
-        power_ymin = df_power_plot.min().min() * 0.9 - buffer
-        power_ymax = df_power_plot.max().max() * 1.1 + buffer
+        power_ymin = df_power_plot.min() * 0.9 - buffer
+        power_ymax = df_power_plot.max() * 1.1 + buffer
         power_ax.set_ylim(power_ymin, power_ymax)
 
     # For voltage axis
     if not df_voltage_plot.empty:
-        voltage_ymin = df_voltage_plot.min().min() * 0.9 - buffer
-        voltage_ymax = df_voltage_plot.max().max() * 1.1 + buffer
+        voltage_ymin = df_voltage_plot.min() * 0.9 - buffer
+        voltage_ymax = df_voltage_plot.max() * 1.1 + buffer
         voltage_ax.set_ylim(voltage_ymin, voltage_ymax)
 
     # For current axis
     if not df_current_plot.empty:
-        current_ymin = df_current_plot.min().min() * 0.9 - buffer
-        current_ymax = df_current_plot.max().max() * 1.1 + buffer
+        current_ymin = df_current_plot.min() * 0.9 - buffer
+        current_ymax = df_current_plot.max() * 1.1 + buffer
         current_ax.set_ylim(current_ymin, current_ymax)
 
     # Tighten layout to avoid overlapping
@@ -289,25 +257,22 @@ def animation_update(frame):
         save_data_to_csv(df)
 
 
+
 def save_data_to_csv(df: pd.DataFrame) -> None:
-    """Saves the power data to a CSV file with aggregated measurements per timestamp."""
+    """Saves the power data to a CSV file."""
     global date_name
     try:
         # Ensure the 'data' directory exists
         os.makedirs('./data', exist_ok=True)
 
-        # Pivot table to aggregate Power, Voltage, and Current for each timestamp
-        df_pivot = df.pivot_table(index='timestamp', 
-                                  values=['Power', 'Voltage', 'Current'], 
-                                  aggfunc='mean').reset_index()
+        # Filter only for valid Power entries
+        df_power = df[['elapsed_time', 'Power', 'Voltage', 'Current']].dropna(subset=['Power'])
 
-        # Save the aggregated data to CSV
-        file_path = f'./data/{date_name}_measurements.csv'
-        df_pivot.to_csv(file_path, mode='w', header=True, index=False)
-        
+        # Save to CSV
+        file_path = f'./data/{date_name}_measurements.csv'  # Use a generic path
+        df_power.to_csv(file_path, mode='w', header=True, index=False)
     except Exception as e:
-        logging.error(f"Error saving data to CSV: {e}")
-
+        logging.error(f"Error saving power data to CSV: {e}")
 
 if __name__ == "__main__":
     if LIST_ALL_WINDOWS_PORTS:
@@ -324,9 +289,8 @@ if __name__ == "__main__":
     current_ax = plt.subplot(gs[1])
     power_ax = plt.subplot(gs[2])
 
-    fig.suptitle('Measurement CPU', fontsize=14)
+    fig.suptitle('Measurement CPU and MATLAB', fontsize=14)
     anim = FuncAnimation(fig, animation_update, interval=2000, cache_frame_data=False)
     fig.tight_layout()
     fig.subplots_adjust(left=0.09)
     plt.show()
-
