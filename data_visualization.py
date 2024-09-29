@@ -1,51 +1,46 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from datetime import datetime
-import matplotlib.dates as mdates
 
 # Load the dataset (adjust the file path as necessary)
-csv_path = 'data/240923-1021_measurements.csv'
+csv_path = 'data/240924-0923_sop_ft533.csv'
 df = pd.read_csv(csv_path)
 
-# Convert 'timestamp' column to datetime format
-df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y-%m-%d %H:%M:%S.%f')
+# Ensure 'elapsed_time' is in the dataset
+if 'elapsed_time' not in df.columns:
+    raise KeyError("'elapsed_time' column is missing from the dataset. Please ensure the file contains the duration of the experiment.")
 
-# Set 'timestamp' as the index for time-based operations
-df.set_index('timestamp', inplace=True)
+# Convert 'elapsed_time' to TimedeltaIndex
+df['elapsed_time'] = pd.to_timedelta(df['elapsed_time'], unit='s')
+
+# Set 'elapsed_time' as the index for time-based operations
+df.set_index('elapsed_time', inplace=True)
 
 # === Visualizations === #
 
-# Plot 1: Current, Voltage, and Power over time
+# Plot 1: Current, Voltage, and Power over elapsed time
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 8))
 
-# Plot Current over time
-ax1.plot(df.index, df['Current'], color='green')
-ax1.set_title('Current Over Time')
-ax1.set_xlabel('Time')
+# Plot Current over elapsed time
+ax1.plot(df.index.total_seconds(), df['Current'], color='green')
+ax1.set_title('Current Over Experiment Duration')
+ax1.set_xlabel('Duration (seconds)')
 ax1.set_ylabel('Current (A)')
 ax1.grid(True)
 
-# Plot Voltage over time
-ax2.plot(df.index, df['Voltage'], color='blue')
-ax2.set_title('Voltage Over Time')
-ax2.set_xlabel('Time')
+# Plot Voltage over elapsed time
+ax2.plot(df.index.total_seconds(), df['Voltage'], color='blue')
+ax2.set_title('Voltage Over Experiment Duration')
+ax2.set_xlabel('Duration (seconds)')
 ax2.set_ylabel('Voltage (V)')
 ax2.grid(True)
 
-# Plot Power over time
-ax3.plot(df.index, df['Power'], color='red')
-ax3.set_title('Power Over Time')
-ax3.set_xlabel('Time')
+# Plot Power over elapsed time
+ax3.plot(df.index.total_seconds(), df['Power'], color='red')
+ax3.set_title('Power Over Experiment Duration')
+ax3.set_xlabel('Duration (seconds)')
 ax3.set_ylabel('Power (W)')
 ax3.grid(True)
-
-# Format x-axes to show time as hours and minutes
-for ax in [ax1, ax2, ax3]:
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))  # Only show hours and minutes
-    ax.xaxis.set_minor_locator(mdates.MinuteLocator())
-    fig.autofmt_xdate()
 
 # Adjust layout to prevent overlap
 plt.tight_layout()
@@ -71,26 +66,19 @@ plt.title('Histogram of Power')
 plt.xlabel('Power (W)')
 plt.ylabel('Frequency')
 
-# Resample data to get the average power per minute
-df_resampled = df.resample('min').mean()
+# Resample data to get the average power per minute (elapsed time in seconds)
+df_resampled = df.resample('60s').mean()
 
 # Drop NaN values from the resampled data (to ensure valid values for plotting)
 df_resampled = df_resampled.dropna(subset=['Power'])
 
 # Plot 5: Average power per minute
 plt.figure(figsize=(10, 6))
-plt.plot(df_resampled.index, df_resampled['Power'], color='red', label='Average Power (W)')
+plt.plot(df_resampled.index.total_seconds() / 60, df_resampled['Power'], color='red', label='Average Power (W)')
 plt.title('Average Power per Minute')
-plt.xlabel('Time')
+plt.xlabel('Elapsed Time (minutes)')
 plt.ylabel('Average Power (W)')
 plt.grid(True)
-
-# Format x-axis for minute display
-plt.gca().xaxis.set_major_locator(mdates.AutoDateLocator())
-plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
-
-# Rotate date labels for better readability
-plt.gcf().autofmt_xdate()
 
 # Show all the plots
 plt.show()
@@ -98,7 +86,7 @@ plt.show()
 # === Calculations and saving .tex file === #
 
 # Calculate time differences between consecutive measurements (in hours)
-df['time_diff_hours'] = df.index.to_series().diff().dt.total_seconds() / 3600
+df['time_diff_hours'] = df.index.to_series().diff().dt.total_seconds() / 3600  # elapsed_time is in seconds, convert to hours
 
 # Fill NaN values in 'time_diff_hours' (set the first difference to 0)
 df['time_diff_hours'] = df['time_diff_hours'].fillna(0)
@@ -109,16 +97,25 @@ df['energy_kWh'] = (df['Power'] * df['time_diff_hours']) / 1000  # Watts to kWh 
 # Calculate the total energy by summing the energy for all intervals
 total_energy_kWh = df['energy_kWh'].sum()
 
+# Calculate total elapsed time in minutes
+total_elapsed_time_minutes = (df.index.max() - df.index.min()).total_seconds() / 60
+
 # Generate a statistical summary (mean, std, min, max) for Power, Voltage, and Current
 stats_summary = df[['Power', 'Voltage', 'Current']].describe()
 
-# Create a new row for the total energy and remove fully NA columns
+# Create new rows for the total energy and total elapsed time in minutes
 energy_row = pd.DataFrame({'Power': [total_energy_kWh], 'Voltage': [None], 'Current': [None]},
                           index=['Total Energy (kWh)'])
-energy_row_clean = energy_row.dropna(how='all', axis=1)  # Remove columns that are fully NA
 
-# Concatenate the energy row to the summary table
-stats_summary = pd.concat([stats_summary, energy_row_clean])
+elapsed_time_row = pd.DataFrame({'Power': [None], 'Voltage': [None], 'Current': [total_elapsed_time_minutes]},
+                                index=['Total Elapsed Time (min)'])
+
+# Remove fully NA columns
+energy_row_clean = energy_row.dropna(how='all', axis=1)
+elapsed_time_row_clean = elapsed_time_row.dropna(how='all', axis=1)
+
+# Concatenate the energy row and elapsed time row to the summary table
+stats_summary = pd.concat([stats_summary, energy_row_clean, elapsed_time_row_clean])
 
 # Save the statistical summary as a LaTeX file
 latex_path = f'{csv_path}.tex'
