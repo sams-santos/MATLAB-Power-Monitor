@@ -269,7 +269,7 @@ def save_data_to_csv(df: pd.DataFrame) -> None:
         df_power = df[['elapsed_time', 'Power', 'Voltage', 'Current']].dropna(subset=['Power'])
 
         # Save to CSV
-        file_path = f'./data/{date_name}_measurements.csv'  # Use a generic path
+        file_path = f'./data/{date_name}_atsp_ft704.csv'  # Use a generic path
         df_power.to_csv(file_path, mode='w', header=True, index=False)
     except Exception as e:
         logging.error(f"Error saving power data to CSV: {e}")
